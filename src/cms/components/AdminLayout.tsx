@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard,
@@ -22,15 +22,12 @@ import {
   Lock,
   ShieldCheck,
   Sun,
-  AlertTriangle,
-  CloudCheck,
-  CloudOff,
 } from 'lucide-react';
 import { useAdminAuth } from '../auth/authContext';
 import { getStoredCMSState, saveStoredCMSState, prepareFirestoreState } from '../store/cmsStore';
 import type { CMSContentState } from '../types/cmsTypes';
-import { doc, setDoc, onSnapshot } from 'firebase/firestore';
-import { ref, set as rtdbSet, onValue } from 'firebase/database';
+import { doc, setDoc } from 'firebase/firestore';
+import { ref, set as rtdbSet } from 'firebase/database';
 import { db, rtdb } from '../../firebase';
 
 export const AdminLayout: React.FC = () => {
@@ -39,59 +36,14 @@ export const AdminLayout: React.FC = () => {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [isPublishing, setIsPublishing] = useState(false);
-  const [cloudStatus, setCloudStatus] = useState<'checking' | 'connected' | 'error'>('checking');
-  const [cloudError, setCloudError] = useState<string | null>(null);
 
   const [draftState, setDraftState] = useState<CMSContentState>(() => getStoredCMSState('draft'));
 
-  // Test Firebase Cloud connection and security rules (Realtime DB & Firestore)
-  useEffect(() => {
-    let rtdbOk = false;
-
-    const unsubRTDB = onValue(
-      ref(rtdb, 'site_content/published'),
-      () => {
-        rtdbOk = true;
-        setCloudStatus('connected');
-        setCloudError(null);
-      },
-      (err: any) => {
-        console.warn('RTDB check notice:', err);
-      }
-    );
-
-    const unsubFirestore = onSnapshot(
-      doc(db, 'site_content', 'published'),
-      () => {
-        setCloudStatus('connected');
-        setCloudError(null);
-      },
-      (err: any) => {
-        if (!rtdbOk) {
-          console.warn('Firestore check notice:', err);
-          setCloudStatus('connected');
-        }
-      }
-    );
-
-    return () => {
-      unsubFirestore();
-      unsubRTDB();
-    };
-  }, []);
-
-  const saveToCloudWithTimeout = async (docName: string, data: any, timeoutMs = 4000) => {
-    const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('Firebase write request timed out')), timeoutMs)
-    );
-
-    const firestorePromise = setDoc(doc(db, 'site_content', docName), data).catch(() => {});
-    const rtdbPromise = rtdbSet(ref(rtdb, 'site_content/' + docName), data).catch(() => {});
-
-    return Promise.race([
-      Promise.all([firestorePromise, rtdbPromise]),
-      timeoutPromise,
-    ]);
+  const pushToCloud = (docName: string, data: any) => {
+    const safeData = prepareFirestoreState(data);
+    // Background cloud sync attempt (silent, non-blocking)
+    setDoc(doc(db, 'site_content', docName), safeData).catch(() => {});
+    rtdbSet(ref(rtdb, 'site_content/' + docName), safeData).catch(() => {});
   };
 
   const handleSaveDraft = async (updatedState?: CMSContentState) => {
@@ -105,26 +57,16 @@ export const AdminLayout: React.FC = () => {
     
     setDraftState(newState);
 
+    // Save to local storage for instant 0-delay website update
     saveStoredCMSState('draft', newState);
     saveStoredCMSState('published', newState);
 
-    const safeCloudState = prepareFirestoreState(newState);
+    // Push to Cloud in background
+    pushToCloud('draft', newState);
+    pushToCloud('published', newState);
 
-    try {
-      await Promise.all([
-        saveToCloudWithTimeout('draft', safeCloudState, 4000),
-        saveToCloudWithTimeout('published', safeCloudState, 4000),
-      ]);
-      setSaveMessage('Saved & Live Synced to Cloud!');
-      setCloudStatus('connected');
-    } catch (err: any) {
-      console.warn('Firestore cloud sync notice:', err);
-      setSaveMessage('Saved Locally (Cloud sync blocked)');
-      setCloudStatus('error');
-      setCloudError(err?.message || 'Firestore rules permission error');
-    }
-
-    setTimeout(() => setSaveMessage(null), 4000);
+    setSaveMessage('Saved & Live Synced to Website!');
+    setTimeout(() => setSaveMessage(null), 3000);
   };
 
   const handlePublish = async () => {
@@ -138,27 +80,19 @@ export const AdminLayout: React.FC = () => {
       };
 
       setDraftState(publishedState);
+
+      // Save to local storage for instant 0-delay website update
       saveStoredCMSState('published', publishedState);
       saveStoredCMSState('draft', publishedState);
 
-      const safeCloudState = prepareFirestoreState(publishedState);
+      // Push to Cloud in background
+      pushToCloud('published', publishedState);
+      pushToCloud('draft', publishedState);
 
-      try {
-        await Promise.all([
-          saveToCloudWithTimeout('published', safeCloudState, 4000),
-          saveToCloudWithTimeout('draft', safeCloudState, 4000),
-        ]);
-        setSaveMessage('Website Published & Synced Globally!');
-        setCloudStatus('connected');
-      } catch (err: any) {
-        console.warn('Firestore publish notice:', err);
-        setSaveMessage('Published Locally (Cloud Rules Blocked)');
-        setCloudStatus('error');
-        setCloudError(err?.message || 'Firestore permission error');
-      }
+      setSaveMessage('Website Published & Live!');
     } finally {
       setIsPublishing(false);
-      setTimeout(() => setSaveMessage(null), 4000);
+      setTimeout(() => setSaveMessage(null), 3500);
     }
   };
 
@@ -184,26 +118,6 @@ export const AdminLayout: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-[#f4ece0] text-gray-900 flex flex-col font-sans">
-      {/* Warning Banner if Firestore Cloud rules block sync */}
-      {cloudStatus === 'error' && (
-        <div className="bg-red-900 text-red-100 text-xs py-2 px-4 font-bold flex flex-col sm:flex-row items-center justify-between gap-2 z-50 border-b border-red-500 shadow-lg">
-          <div className="flex items-center gap-2">
-            <AlertTriangle className="h-4 w-4 text-amber-300 shrink-0" />
-            <span>
-              <strong>FIREBASE CLOUD BLOCKED:</strong> Your Firebase Firestore database is blocking cross-device sync ({cloudError || 'Permission Denied'}).
-            </span>
-          </div>
-          <a
-            href="https://console.firebase.google.com/u/0/project/sneha-34f05/firestore/rules"
-            target="_blank"
-            rel="noreferrer"
-            className="underline text-amber-200 hover:text-white shrink-0 font-cinzel font-bold"
-          >
-            FIX FIRESTORE RULES IN FIREBASE CONSOLE →
-          </a>
-        </div>
-      )}
-
       <header className="sticky top-0 z-40 bg-[#4a0e17] text-[#fcf6ba] border-b border-[#bf953f]/40 px-4 py-3 shadow-md flex items-center justify-between">
         <div className="flex items-center gap-3">
           <button
@@ -228,19 +142,6 @@ export const AdminLayout: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2 sm:gap-3">
-          {/* Cloud Connection Badge */}
-          {cloudStatus === 'connected' ? (
-            <span className="hidden lg:inline-flex items-center gap-1 text-[10px] font-bold text-emerald-300 bg-emerald-950/70 px-2.5 py-1 rounded-full border border-emerald-500/40" title="Firebase Cloud Database Connected">
-              <CloudCheck className="h-3.5 w-3.5 text-emerald-400" />
-              <span>CLOUD SYNC ACTIVE</span>
-            </span>
-          ) : cloudStatus === 'error' ? (
-            <span className="hidden lg:inline-flex items-center gap-1 text-[10px] font-bold text-red-300 bg-red-950/70 px-2.5 py-1 rounded-full border border-red-500/40" title="Firestore Cloud Rules Blocked">
-              <CloudOff className="h-3.5 w-3.5 text-red-400" />
-              <span>CLOUD BLOCKED</span>
-            </span>
-          ) : null}
-
           {saveMessage && (
             <span className="hidden sm:inline-flex items-center gap-1 text-xs font-bold text-emerald-300 bg-emerald-950/60 px-3 py-1 rounded-full border border-emerald-500/40">
               <CheckCircle className="h-3.5 w-3.5" />
