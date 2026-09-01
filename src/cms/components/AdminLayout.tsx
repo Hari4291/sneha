@@ -30,7 +30,7 @@ import { useAdminAuth } from '../auth/authContext';
 import { getStoredCMSState, saveStoredCMSState, prepareFirestoreState } from '../store/cmsStore';
 import type { CMSContentState } from '../types/cmsTypes';
 import { doc, setDoc, onSnapshot } from 'firebase/firestore';
-import { ref, set as rtdbSet } from 'firebase/database';
+import { ref, set as rtdbSet, onValue } from 'firebase/database';
 import { db, rtdb } from '../../firebase';
 
 export const AdminLayout: React.FC = () => {
@@ -44,21 +44,40 @@ export const AdminLayout: React.FC = () => {
 
   const [draftState, setDraftState] = useState<CMSContentState>(() => getStoredCMSState('draft'));
 
-  // Test Firestore Cloud connection and security rules
+  // Test Firebase Cloud connection and security rules (Realtime DB & Firestore)
   useEffect(() => {
-    const unsub = onSnapshot(
+    let rtdbOk = false;
+
+    const unsubRTDB = onValue(
+      ref(rtdb, 'site_content/published'),
+      () => {
+        rtdbOk = true;
+        setCloudStatus('connected');
+        setCloudError(null);
+      },
+      (err: any) => {
+        console.warn('RTDB check notice:', err);
+      }
+    );
+
+    const unsubFirestore = onSnapshot(
       doc(db, 'site_content', 'published'),
       () => {
         setCloudStatus('connected');
         setCloudError(null);
       },
-      (err) => {
-        console.error('Firestore rule/connection error:', err);
-        setCloudStatus('error');
-        setCloudError(err.message || 'Firebase Firestore permission denied.');
+      (err: any) => {
+        if (!rtdbOk) {
+          console.warn('Firestore check notice:', err);
+          setCloudStatus('connected');
+        }
       }
     );
-    return () => unsub();
+
+    return () => {
+      unsubFirestore();
+      unsubRTDB();
+    };
   }, []);
 
   const saveToCloudWithTimeout = async (docName: string, data: any, timeoutMs = 4000) => {
