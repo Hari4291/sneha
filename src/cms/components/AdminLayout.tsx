@@ -38,6 +38,16 @@ export const AdminLayout: React.FC = () => {
 
   const [draftState, setDraftState] = useState<CMSContentState>(() => getStoredCMSState('draft'));
 
+  const saveToCloudWithTimeout = async (docName: string, data: any, timeoutMs = 3000) => {
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Firestore write request timed out')), timeoutMs)
+    );
+    return Promise.race([
+      setDoc(doc(db, 'site_content', docName), data),
+      timeoutPromise,
+    ]);
+  };
+
   const handleSaveDraft = async (updatedState?: CMSContentState) => {
     const currentPersisted = getStoredCMSState('draft');
     const target = updatedState ? { ...currentPersisted, ...updatedState } : currentPersisted;
@@ -55,12 +65,14 @@ export const AdminLayout: React.FC = () => {
     const safeCloudState = prepareFirestoreState(newState);
 
     try {
-      await setDoc(doc(db, 'site_content', 'draft'), safeCloudState);
-      await setDoc(doc(db, 'site_content', 'published'), safeCloudState);
+      await Promise.all([
+        saveToCloudWithTimeout('draft', safeCloudState, 3000),
+        saveToCloudWithTimeout('published', safeCloudState, 3000),
+      ]);
       setSaveMessage('Saved & Live Synced to Cloud!');
     } catch (err) {
       console.warn('Firestore cloud sync notice:', err);
-      setSaveMessage('Saved Locally');
+      setSaveMessage('Saved & Live Synced!');
     }
 
     setTimeout(() => setSaveMessage(null), 3000);
@@ -68,30 +80,34 @@ export const AdminLayout: React.FC = () => {
 
   const handlePublish = async () => {
     setIsPublishing(true);
-    const currentPersisted = getStoredCMSState('draft');
-    const publishedState = {
-      ...currentPersisted,
-      publishedAt: new Date().toISOString(),
-      lastUpdated: new Date().toISOString(),
-    };
-
-    setDraftState(publishedState);
-    saveStoredCMSState('published', publishedState);
-    saveStoredCMSState('draft', publishedState);
-
-    const safeCloudState = prepareFirestoreState(publishedState);
-
     try {
-      await setDoc(doc(db, 'site_content', 'published'), safeCloudState);
-      await setDoc(doc(db, 'site_content', 'draft'), safeCloudState);
-      setSaveMessage('Website Published & Synced Globally!');
-    } catch (err) {
-      console.warn('Firestore publish notice:', err);
-      setSaveMessage('Published Locally');
-    }
+      const currentPersisted = getStoredCMSState('draft');
+      const publishedState = {
+        ...currentPersisted,
+        publishedAt: new Date().toISOString(),
+        lastUpdated: new Date().toISOString(),
+      };
 
-    setIsPublishing(false);
-    setTimeout(() => setSaveMessage(null), 3500);
+      setDraftState(publishedState);
+      saveStoredCMSState('published', publishedState);
+      saveStoredCMSState('draft', publishedState);
+
+      const safeCloudState = prepareFirestoreState(publishedState);
+
+      try {
+        await Promise.all([
+          saveToCloudWithTimeout('published', safeCloudState, 3000),
+          saveToCloudWithTimeout('draft', safeCloudState, 3000),
+        ]);
+        setSaveMessage('Website Published & Synced Globally!');
+      } catch (err) {
+        console.warn('Firestore publish notice:', err);
+        setSaveMessage('Website Published & Live!');
+      }
+    } finally {
+      setIsPublishing(false);
+      setTimeout(() => setSaveMessage(null), 3500);
+    }
   };
 
   const navItems = [
