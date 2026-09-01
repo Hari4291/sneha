@@ -1,0 +1,77 @@
+@import "tailwindcss";
+
+@layer utilities {
+  .font-cinzel {
+    font-family: 'Cinzel', serif;
+  }
+  .font-cormorant {
+    font-family: 'Cormorant Garamond', serif;
+  }
+  .font-script {
+    font-family: 'Great Vibes', cursive;
+  }
+  .font-sans {
+    font-family: 'Plus Jakarta Sans', sans-serif;
+  }
+
+  /* Gold & Maroon Shimmer / Text Gradients for Beige Theme */
+  .text-gold-gradient {
+    background: linear-gradient(135deg, #7c5812 0%, #b38728 30%, #8a5d12 70%, #593e0b 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .text-maroon-gradient {
+    background: linear-gradient(135deg, #4a0e17 0%, #7a1c29 50%, #3b0910 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .bg-gold-gradient {
+    background: linear-gradient(135deg, #bf953f 0%, #fcf6ba 30%, #b38728 60%, #aa771c 100%);
+  }
+
+  .bg-gold-metallic {
+    background: linear-gradient(180deg, #d4af37 0%, #aa771c 50%, #8a5d12 100%);
+  }
+
+  /* Royal Beige Color Palette */
+  .bg-beige-primary {
+    background-color: #f7f2e8;
+  }
+
+  .bg-beige-soft {
+    background-color: #f4ece0;
+  }
+
+  .bg-beige-dark {
+    background-color: #eae1d2;
+  }
+
+  .bg-parchment-light {
+    background-color: #fffdf9;
+  }
+
+  /* Glassmorphism for Light Beige */
+  .glass-card-beige {
+    background: rgba(255, 253, 249, 0.92);
+    backdrop-filter: blur(16px);
+    border: 1px solid rgba(191, 149, 63, 0.35);
+    box-shadow: 0 20px 40px -15px rgba(74, 14, 23, 0.08);
+  }
+}
+
+/* Custom Scrollbar for Beige Theme */
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #f7f2e8;
+}
+::-webkit-scrollbar-thumb {
+  background: #c2a366;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #8a5d12;
+}
