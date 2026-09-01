@@ -30,7 +30,8 @@ import { useAdminAuth } from '../auth/authContext';
 import { getStoredCMSState, saveStoredCMSState, prepareFirestoreState } from '../store/cmsStore';
 import type { CMSContentState } from '../types/cmsTypes';
 import { doc, setDoc, onSnapshot } from 'firebase/firestore';
-import { db } from '../../firebase';
+import { ref, set as rtdbSet } from 'firebase/database';
+import { db, rtdb } from '../../firebase';
 
 export const AdminLayout: React.FC = () => {
   const { logout, adminEmail } = useAdminAuth();
@@ -62,10 +63,14 @@ export const AdminLayout: React.FC = () => {
 
   const saveToCloudWithTimeout = async (docName: string, data: any, timeoutMs = 4000) => {
     const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('Firestore write request timed out')), timeoutMs)
+      setTimeout(() => reject(new Error('Firebase write request timed out')), timeoutMs)
     );
+
+    const firestorePromise = setDoc(doc(db, 'site_content', docName), data).catch(() => {});
+    const rtdbPromise = rtdbSet(ref(rtdb, 'site_content/' + docName), data).catch(() => {});
+
     return Promise.race([
-      setDoc(doc(db, 'site_content', docName), data),
+      Promise.all([firestorePromise, rtdbPromise]),
       timeoutPromise,
     ]);
   };

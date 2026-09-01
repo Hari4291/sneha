@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { doc, onSnapshot, setDoc } from 'firebase/firestore';
-import { db } from '../../firebase';
+import { ref, set as rtdbSet, onValue } from 'firebase/database';
+import { db, rtdb } from '../../firebase';
 import type { CMSContentState, SectionConfig, GalleryItemData } from '../types/cmsTypes';
 import { WEDDING_DATA } from '../../data/weddingData';
 
@@ -315,8 +316,12 @@ export async function syncCurrentStateToCloud(state?: CMSContentState): Promise<
   try {
     const currentState = state || getStoredCMSState('published');
     const safeState = prepareFirestoreState(currentState);
-    await setDoc(doc(db, 'site_content', 'published'), safeState);
-    await setDoc(doc(db, 'site_content', 'draft'), safeState);
+    await Promise.all([
+      setDoc(doc(db, 'site_content', 'published'), safeState).catch(() => {}),
+      setDoc(doc(db, 'site_content', 'draft'), safeState).catch(() => {}),
+      rtdbSet(ref(rtdb, 'site_content/published'), safeState).catch(() => {}),
+      rtdbSet(ref(rtdb, 'site_content/draft'), safeState).catch(() => {}),
+    ]);
     return true;
   } catch (err) {
     console.error('Failed to sync state to Firebase Cloud:', err);
@@ -458,6 +463,21 @@ export function useCMSContent(isPreviewMode = false) {
       }
     );
 
+    const rtdbRef = ref(rtdb, 'site_content/' + docName);
+    const unsubRTDB = onValue(
+      rtdbRef,
+      (snapshot) => {
+        if (snapshot.exists()) {
+          const val = snapshot.val() as CMSContentState;
+          if (val) {
+            saveStoredCMSState(targetType, val);
+            setContent({ ...val });
+          }
+        }
+      },
+      () => {}
+    );
+
     return () => {
       window.removeEventListener('cms_state_synced', handleStateChange);
       window.removeEventListener('storage', handleStateChange);
@@ -465,6 +485,7 @@ export function useCMSContent(isPreviewMode = false) {
         syncChannel.removeEventListener('message', handleBroadcast);
       }
       unsubFirestore();
+      unsubRTDB();
     };
   }, [targetType]);
 
