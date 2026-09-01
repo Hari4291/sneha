@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { Film } from 'lucide-react';
 import { useCMSContent } from '../cms/store/cmsStore';
 import type { ReelItemData } from '../cms/types/cmsTypes';
@@ -22,9 +22,9 @@ export const ReelsSection: React.FC<ReelsSectionProps> = ({ isPreview = false })
     return null;
   }
 
-  // Generate continuous repeating base sequence (e.g. 1-1-1-1-1-1-1-1 or 1-2-1-2-1-2-1-2)
-  const targetMinBaseCount = 12;
-  const repeatMultiplier = Math.ceil(targetMinBaseCount / activeReels.length);
+  // Generate continuous repeating base sequence (e.g. 6-8 items max to avoid browser GPU decoder overload)
+  const targetMinBaseCount = 6;
+  const repeatMultiplier = Math.max(2, Math.ceil(targetMinBaseCount / activeReels.length));
   const baseSequence: ReelItemData[] = [];
   for (let i = 0; i < repeatMultiplier; i++) {
     baseSequence.push(...activeReels);
@@ -48,10 +48,10 @@ export const ReelsSection: React.FC<ReelsSectionProps> = ({ isPreview = false })
       <style>{`
         @keyframes marqueeRightToLeft {
           0% {
-            transform: translateX(0%);
+            transform: translate3d(0%, 0, 0);
           }
           100% {
-            transform: translateX(-50%);
+            transform: translate3d(-50%, 0, 0);
           }
         }
         .animate-reels-marquee {
@@ -59,6 +59,8 @@ export const ReelsSection: React.FC<ReelsSectionProps> = ({ isPreview = false })
           width: max-content;
           animation: marqueeRightToLeft 65s linear infinite;
           will-change: transform;
+          backface-visibility: hidden;
+          perspective: 1000px;
         }
       `}</style>
 
@@ -111,32 +113,77 @@ interface ReelCardProps {
 }
 
 const ReelCard: React.FC<ReelCardProps> = ({ reel, onClick }) => {
+  const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const [isInView, setIsInView] = useState(false);
+  const [hasVideoError, setHasVideoError] = useState(false);
 
+  // IntersectionObserver to manage hardware video decoder contexts
   useEffect(() => {
-    if (videoRef.current) {
-      videoRef.current.play().catch(() => {
-        // Autoplay policy fallback: keep muted and play
-      });
-    }
+    const el = containerRef.current;
+    if (!el) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          setIsInView(entry.isIntersecting);
+        });
+      },
+      { root: null, threshold: 0.1 }
+    );
+
+    observer.observe(el);
+    return () => observer.disconnect();
   }, []);
+
+  // Play video only when card is inside the viewport
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    if (isInView && !hasVideoError) {
+      const playPromise = video.play();
+      if (playPromise !== undefined) {
+        playPromise.catch(() => {
+          // Autoplay policy fallback: keep muted
+        });
+      }
+    } else {
+      video.pause();
+    }
+  }, [isInView, hasVideoError]);
 
   return (
     <div
+      ref={containerRef}
       onClick={onClick}
       className="group relative w-60 sm:w-72 aspect-[9/16] shrink-0 rounded-2xl overflow-hidden border-2 border-[#bf953f] bg-[#12080a] shadow-xl shadow-[#4a0e17]/20 cursor-pointer transform transition-transform duration-500 hover:scale-105 hover:border-[#8a5d12]"
     >
+      {/* Poster Image / Fallback image */}
+      {reel.posterUrl && (
+        <img
+          src={reel.posterUrl}
+          alt={reel.title}
+          className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-300 ${
+            isInView && !hasVideoError ? 'opacity-0' : 'opacity-100'
+          }`}
+        />
+      )}
+
       {/* Video Element: Autoplay, Muted, PlaysInline, Loop, No Controls */}
-      <video
-        ref={videoRef}
-        src={reel.videoUrl}
-        poster={reel.posterUrl}
-        autoPlay
-        muted
-        playsInline
-        loop
-        className="h-full w-full object-cover pointer-events-none"
-      />
+      {!hasVideoError && (
+        <video
+          ref={videoRef}
+          src={reel.videoUrl}
+          poster={reel.posterUrl}
+          muted
+          playsInline
+          loop
+          preload="metadata"
+          onError={() => setHasVideoError(true)}
+          className="h-full w-full object-cover pointer-events-none"
+        />
+      )}
 
       {/* Luxury Gradient Overlay */}
       <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/85 opacity-80 group-hover:opacity-95 transition-opacity" />
