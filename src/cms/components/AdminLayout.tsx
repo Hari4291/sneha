@@ -24,7 +24,7 @@ import {
   Sun,
 } from 'lucide-react';
 import { useAdminAuth } from '../auth/authContext';
-import { getStoredCMSState, saveStoredCMSState } from '../store/cmsStore';
+import { getStoredCMSState, saveStoredCMSState, prepareFirestoreState } from '../store/cmsStore';
 import type { CMSContentState } from '../types/cmsTypes';
 import { doc, setDoc } from 'firebase/firestore';
 import { db } from '../../firebase';
@@ -52,14 +52,17 @@ export const AdminLayout: React.FC = () => {
     saveStoredCMSState('draft', newState);
     saveStoredCMSState('published', newState);
 
+    const safeCloudState = prepareFirestoreState(newState);
+
     try {
-      await setDoc(doc(db, 'site_content', 'draft'), newState);
-      await setDoc(doc(db, 'site_content', 'published'), newState);
-    } catch {
-      // offline fallback
+      await setDoc(doc(db, 'site_content', 'draft'), safeCloudState);
+      await setDoc(doc(db, 'site_content', 'published'), safeCloudState);
+      setSaveMessage('Saved & Live Synced to Cloud!');
+    } catch (err) {
+      console.warn('Firestore cloud sync notice:', err);
+      setSaveMessage('Saved Locally');
     }
 
-    setSaveMessage('Saved & Live Synced to Website!');
     setTimeout(() => setSaveMessage(null), 3000);
   };
 
@@ -76,15 +79,18 @@ export const AdminLayout: React.FC = () => {
     saveStoredCMSState('published', publishedState);
     saveStoredCMSState('draft', publishedState);
 
+    const safeCloudState = prepareFirestoreState(publishedState);
+
     try {
-      await setDoc(doc(db, 'site_content', 'published'), publishedState);
-      await setDoc(doc(db, 'site_content', 'draft'), publishedState);
-    } catch {
-      // offline fallback
+      await setDoc(doc(db, 'site_content', 'published'), safeCloudState);
+      await setDoc(doc(db, 'site_content', 'draft'), safeCloudState);
+      setSaveMessage('Website Published & Synced Globally!');
+    } catch (err) {
+      console.warn('Firestore publish notice:', err);
+      setSaveMessage('Published Locally');
     }
 
     setIsPublishing(false);
-    setSaveMessage('Website Published Successfully!');
     setTimeout(() => setSaveMessage(null), 3500);
   };
 

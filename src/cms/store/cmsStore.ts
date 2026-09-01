@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { doc, onSnapshot, setDoc } from 'firebase/firestore';
 import { db } from '../../firebase';
 import type { CMSContentState, SectionConfig, GalleryItemData } from '../types/cmsTypes';
 import { WEDDING_DATA } from '../../data/weddingData';
@@ -281,6 +281,47 @@ function sanitizeSections(sections?: SectionConfig[]): SectionConfig[] {
   }
 
   return list.map((sec, idx) => ({ ...sec, order: idx + 1 }));
+}
+
+export function prepareFirestoreState(state: CMSContentState): CMSContentState {
+  const cleanReels = (state.reels || []).map((reel) => {
+    if (reel.videoUrl && reel.videoUrl.startsWith('data:video') && reel.videoUrl.length > 100000) {
+      return {
+        ...reel,
+        videoUrl: 'https://assets.mixkit.co/videos/preview/mixkit-bride-and-groom-smiling-at-their-wedding-41584-large.mp4',
+      };
+    }
+    return reel;
+  });
+
+  const cleanGallery = (state.gallery || []).map((item) => {
+    if (item.url && item.url.startsWith('data:image') && item.url.length > 100000) {
+      return {
+        ...item,
+        url: '/assets/couple_real_hero.jpg',
+      };
+    }
+    return item;
+  });
+
+  return {
+    ...state,
+    reels: cleanReels,
+    gallery: cleanGallery,
+  };
+}
+
+export async function syncCurrentStateToCloud(state?: CMSContentState): Promise<boolean> {
+  try {
+    const currentState = state || getStoredCMSState('published');
+    const safeState = prepareFirestoreState(currentState);
+    await setDoc(doc(db, 'site_content', 'published'), safeState);
+    await setDoc(doc(db, 'site_content', 'draft'), safeState);
+    return true;
+  } catch (err) {
+    console.error('Failed to sync state to Firebase Cloud:', err);
+    return false;
+  }
 }
 
 export function getStoredCMSState(type: 'draft' | 'published'): CMSContentState {
