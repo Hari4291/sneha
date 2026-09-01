@@ -1,5 +1,5 @@
 import React from 'react';
-import { ChevronUp } from 'lucide-react';
+import { ChevronUp, Heart } from 'lucide-react';
 import { useCMSContent } from '../cms/store/cmsStore';
 
 interface FooterClosingProps {
@@ -14,6 +14,8 @@ export const FooterClosing: React.FC<FooterClosingProps> = ({ isPreview = false 
   const scrollToTop = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
+
+  const whatsappUrl = "https://wa.me/916304043014?text=Hello%2C%20I%20saw%20your%20wedding%20invitation%20website!";
 
   return (
     <footer className="relative bg-[#f8f3ea] py-16 px-4 text-[#4a0e17] overflow-hidden border-t-2 border-[#bf953f]/60">
@@ -53,7 +55,7 @@ export const FooterClosing: React.FC<FooterClosingProps> = ({ isPreview = false 
         </p>
 
         {/* Scroll Back To Top Button */}
-        <div className="pt-4">
+        <div className="pt-4 flex flex-col items-center space-y-4">
           <button
             onClick={scrollToTop}
             className="inline-flex flex-col items-center gap-1.5 font-cinzel text-[10px] font-bold tracking-[0.3em] text-[#8a5d12] uppercase hover:text-[#4a0e17] transition-colors cursor-pointer"
@@ -63,6 +65,20 @@ export const FooterClosing: React.FC<FooterClosingProps> = ({ isPreview = false 
             </div>
             <span>{data.revisitText}</span>
           </button>
+
+          {/* Made with Love Symbol -> WhatsApp Link */}
+          <div className="pt-1">
+            <a
+              href={whatsappUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 rounded-full border border-[#bf953f]/50 bg-[#fffdf9] px-4 py-2 text-xs font-cinzel font-bold text-[#4a0e17] hover:bg-[#4a0e17] hover:text-[#fcf6ba] hover:border-[#bf953f] transition-all duration-300 shadow-md cursor-pointer group"
+              title="Click to chat on WhatsApp (+91 6304043014)"
+            >
+              <span>Made with</span>
+              <Heart className="h-4 w-4 text-red-600 fill-red-600 group-hover:scale-125 transition-transform duration-300" />
+            </a>
+          </div>
         </div>
 
         <div className="border-t border-[#bf953f]/30 pt-6 text-[11px] font-sans text-gray-600">
