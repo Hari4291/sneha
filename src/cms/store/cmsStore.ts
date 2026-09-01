@@ -444,10 +444,17 @@ export function useCMSContent(isPreviewMode = false) {
             saveStoredCMSState(targetType, remoteData);
             setContent({ ...remoteData });
           }
+        } else {
+          // Document does not exist in Firestore on new domain yet, seed it automatically
+          const localState = getStoredCMSState(targetType);
+          const safeState = prepareFirestoreState(localState);
+          setDoc(doc(db, 'site_content', docName), safeState).catch((err) => {
+            console.warn('Auto-seed Firestore error on new domain:', err);
+          });
         }
       },
-      () => {
-        // offline fallback
+      (err) => {
+        console.warn('Firestore snapshot notice on new domain:', err);
       }
     );
 
